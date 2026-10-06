@@ -1,0 +1,141 @@
+/* ==========================================================================
+   校园失物招领 · 基础样式与设计变量 (base.css)
+   说明：定义全局设计令牌（颜色、圆角、阴影、尺寸）与基础元素样式。
+   ========================================================================== */
+
+:root {
+  /* 品牌色 */
+  --primary: #4f6ef7;
+  --primary-dark: #3b57e0;
+  --primary-soft: #eef1ff;
+
+  /* 寻物 / 招领 主题色 */
+  --lost: #3b82f6;
+  --lost-soft: #eaf2ff;
+  --found: #f59e0b;
+  --found-soft: #fff4e0;
+
+  /* 状态色 */
+  --success: #22c55e;
+  --success-soft: #e9f9ef;
+  --info: #3b82f6;
+  --info-soft: #eaf2ff;
+  --muted: #94a3b8;
+  --muted-soft: #f1f5f9;
+  --danger: #ef4444;
+  --danger-soft: #feecec;
+
+  /* 文字 */
+  --text: #1e293b;
+  --text-2: #52637a;
+  --text-3: #94a3b8;
+
+  /* 背景与边框 */
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --border: #e8ecf2;
+  --divider: #eef1f5;
+
+  /* 圆角与阴影 */
+  --radius-lg: 18px;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow-sm: 0 2px 8px rgba(30, 41, 59, 0.05);
+  --shadow: 0 4px 16px rgba(30, 41, 59, 0.08);
+  --shadow-lg: 0 10px 34px rgba(30, 41, 59, 0.14);
+
+  /* 尺寸 */
+  --tabbar-h: 64px;
+  --header-h: 52px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: #e9edf2;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+ul, ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* App 容器：模拟手机视口，桌面端居中展示 */
+#app {
+  position: relative;
+  max-width: 480px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  background: var(--bg);
+  box-shadow: 0 0 0 1px rgba(30, 41, 59, 0.04), 0 0 40px rgba(30, 41, 59, 0.10);
+}
+
+/* 页面 */
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: calc(var(--tabbar-h) + 24px);
+  animation: pageIn 0.28s ease both;
+}
+
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 通用工具类 */
+.muted { color: var(--text-3); }
+.ellipsis { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hidden { display: none !important; }

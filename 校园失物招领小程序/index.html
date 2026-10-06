@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#4f6ef7">
+  <meta name="description" content="校园失物招领小程序：集中发布与浏览寻物、招领信息，支持关键词搜索，提高校园失物寻找与归还效率。">
+  <title>校园失物招领</title>
+  <link rel="icon" type="image/svg+xml" href="images/logo.svg">
+
+  <!-- 第三方样式：normalize.css v8.0.1（统一各浏览器默认样式） -->
+  <link rel="stylesheet" href="css/vendor/normalize.css">
+  <!-- 项目样式 -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 视图容器：由 js/app.js 根据路由渲染对应页面 -->
+    <main id="view"></main>
+    <!-- 底部导航：由 js/app.js 注入 -->
+    <nav class="tabbar" id="tabbar"></nav>
+  </div>
+
+  <!-- 轻提示 -->
+  <div id="toast" role="status"></div>
+
+  <!-- 脚本：按依赖顺序加载（无构建、零依赖，双击 index.html 即可运行） -->
+  <script src="js/utils.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/views/home.js"></script>
+  <script src="js/views/search.js"></script>
+  <script src="js/views/publish.js"></script>
+  <script src="js/views/detail.js"></script>
+  <script src="js/views/my.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
