@@ -17,13 +17,24 @@ window.LF = window.LF || {};
 
   function render(editId) {
     const editing = editId ? LF.store.getItem(editId) : null;
+    const container = LF.$('#view');
+    if (editId && (!editing || !editing.isMine)) {
+      container.innerHTML =
+        '<div class="page page-publish">' +
+          LF.ui.headerHTML('编辑信息', true) +
+          LF.ui.emptyHTML('无法编辑这条信息', '信息不存在，或当前浏览器没有管理权限', '返回我的发布') +
+        '</div>';
+      const btn = container.querySelector('[data-empty-action]');
+      if (btn) btn.addEventListener('click', function () { location.hash = '#/my'; });
+      return;
+    }
     const isEdit = !!editing;
     const item = editing || {
       type: 'lost', name: '', category: '', time: '', location: '',
-      description: '', image: '', contact: '', nickname: ''
+      description: '', images: [], contact: '', nickname: ''
     };
+    const initialImages = LF.itemImages(item);
 
-    const container = LF.$('#view');
     container.innerHTML =
       '<div class="page page-publish">' +
         LF.ui.headerHTML(isEdit ? '编辑信息' : '发布信息', true) +
@@ -67,14 +78,11 @@ window.LF = window.LF || {};
             '<div class="form-group">' +
               '<div class="form-label">物品图片</div>' +
               '<div class="uploader">' +
-                '<div class="uploader__box" id="f-upload"' + (item.image ? ' style="display:none"' : '') + '>' + LF.icon('image') + '<span>上传图片</span></div>' +
-                '<div class="uploader__preview" id="f-preview"' + (item.image ? '' : ' style="display:none"') + '>' +
-                  '<img id="f-preview-img" src="' + LF.escapeHtml(item.image) + '" alt="预览">' +
-                  '<button class="uploader__remove" id="f-remove" type="button">' + LF.icon('close') + '</button>' +
-                '</div>' +
-                '<div class="uploader__tip">支持 JPG/PNG，自动压缩后保存在本地浏览器</div>' +
+                '<div class="uploader__previews" id="f-previews"></div>' +
+                '<div class="uploader__box" id="f-upload">' + LF.icon('image') + '<span>添加图片</span></div>' +
+                '<div class="uploader__tip">最多 6 张，支持 JPG/PNG/WebP；点击图片可放大查看</div>' +
               '</div>' +
-              '<input type="file" id="f-file" accept="image/*" style="display:none">' +
+              '<input type="file" id="f-file" accept="image/png,image/jpeg,image/webp" multiple style="display:none">' +
             '</div>' +
             '<div class="form-group">' +
               '<div class="form-label">联系方式 <span class="req">*</span></div>' +
@@ -91,7 +99,11 @@ window.LF = window.LF || {};
         '</div>' +
       '</div>';
 
-    const state = { type: item.type, category: item.category, image: item.image };
+    const state = {
+      type: item.type,
+      category: item.category,
+      images: initialImages
+    };
 
     // 类型切换
     const typeBtns = LF.$$('.type-switch__item');
@@ -110,30 +122,59 @@ window.LF = window.LF || {};
       LF.$$('#f-cats .chip').forEach(function (b) { b.classList.toggle('active', b === btn); });
     });
 
-    // 图片上传
-    function setImage(dataUrl) {
-      state.image = dataUrl;
-      LF.$('#f-upload').style.display = dataUrl ? 'none' : '';
-      LF.$('#f-preview').style.display = dataUrl ? '' : 'none';
-      if (dataUrl) LF.$('#f-preview-img').src = dataUrl;
+    // 多图上传
+    function renderImages() {
+      LF.$('#f-previews').innerHTML = state.images.map(function (image, index) {
+        return '<div class="uploader__preview" data-preview-index="' + index + '">' +
+          '<img src="' + LF.escapeHtml(image) + '" alt="图片 ' + (index + 1) + '">' +
+          '<button class="uploader__remove" data-remove-index="' + index + '" type="button" aria-label="删除第 ' + (index + 1) + ' 张图片">' +
+            LF.icon('close') +
+          '</button>' +
+        '</div>';
+      }).join('');
+      LF.$('#f-upload').style.display = state.images.length >= 6 ? 'none' : '';
     }
 
     LF.$('#f-upload').addEventListener('click', function () { LF.$('#f-file').click(); });
-    LF.$('#f-file').addEventListener('change', function (e) {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      LF.ui.toast('正在处理图片…');
-      LF.compressImage(file, 900, 0.72)
-        .then(function (dataUrl) {
-          setImage(dataUrl);
-          LF.ui.toast('图片已添加', 'success');
-        })
-        .catch(function () {
-          LF.ui.toast('图片处理失败，请重试', 'error');
-        });
-      e.target.value = '';
+    LF.$('#f-previews').addEventListener('click', function (e) {
+      const removeBtn = e.target.closest('[data-remove-index]');
+      if (removeBtn) {
+        state.images.splice(Number(removeBtn.getAttribute('data-remove-index')), 1);
+        renderImages();
+        return;
+      }
+      const preview = e.target.closest('[data-preview-index]');
+      if (preview) {
+        LF.openLightbox(state.images, Number(preview.getAttribute('data-preview-index')));
+      }
     });
-    LF.$('#f-remove').addEventListener('click', function () { setImage(''); });
+    LF.$('#f-file').addEventListener('change', async function (e) {
+      const files = Array.prototype.slice.call(e.target.files || []);
+      e.target.value = '';
+      if (!files.length) return;
+
+      const available = 6 - state.images.length;
+      if (available <= 0) {
+        LF.ui.toast('最多上传 6 张图片', 'error');
+        return;
+      }
+      const selected = files.slice(0, available);
+      if (files.length > selected.length) LF.ui.toast('最多上传 6 张图片，多余图片未添加', 'error');
+      LF.ui.toast('正在处理图片…');
+
+      let added = 0;
+      for (const file of selected) {
+        try {
+          state.images.push(await LF.compressImage(file, 900, 0.72));
+          added += 1;
+          renderImages();
+        } catch (err) {
+          LF.ui.toast('有图片处理失败，请重试', 'error');
+        }
+      }
+      if (added) LF.ui.toast('已添加 ' + added + ' 张图片', 'success');
+    });
+    renderImages();
 
     // 提交
     LF.$('#f-submit').addEventListener('click', submit);
@@ -161,7 +202,7 @@ window.LF = window.LF || {};
         if (isEdit) {
           await LF.store.updateItem(editId, {
             type: state.type, name: name, category: state.category, time: timeISO,
-            location: locationText, description: description, image: state.image,
+            location: locationText, description: description, images: state.images,
             contact: contact, nickname: nickname
           });
           LF.ui.toast('修改成功', 'success');
@@ -169,9 +210,8 @@ window.LF = window.LF || {};
         } else {
           const newItem = await LF.store.addItem({
             id: LF.uid(), type: state.type, name: name, category: state.category, time: timeISO,
-            location: locationText, description: description, image: state.image,
-            contact: contact, nickname: nickname,
-            status: 'open', deviceId: LF.store.getDeviceId(), createdAt: Date.now()
+            location: locationText, description: description, images: state.images,
+            contact: contact, nickname: nickname, found: false, closed: false
           });
           LF.ui.modal({
             icon: '🎉',

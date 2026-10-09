@@ -1,7 +1,7 @@
 /* ==========================================================================
    校园失物招领 · 详情视图 (views/detail.js)
    说明：展示图片、描述、时间、地点、发布者与联系方式；支持复制/拨号；
-         若是本人发布，额外提供编辑、标记已找到、关闭、删除等操作。
+         若是本人发布，额外提供编辑、标记状态、关闭、删除等操作。
    ========================================================================== */
 window.LF = window.LF || {};
 
@@ -23,11 +23,11 @@ window.LF = window.LF || {};
       return;
     }
 
-    const isMine = item.deviceId === LF.store.getDeviceId();
+    const isMine = item.isMine === true;
     const tm = LF.typeMeta(item.type);
-    const sm = LF.statusMeta(item.status);
     const cat = LF.getCategory(item.category);
-    const img = item.image || LF.placeholderFor(item.category);
+    const photos = LF.itemImages(item);
+    const galleryImages = photos.length ? photos : [LF.placeholderFor(item.category)];
     const phone = LF.isPhone(item.contact);
     const avatar = (item.nickname || '匿').charAt(0);
 
@@ -35,11 +35,18 @@ window.LF = window.LF || {};
       '<div class="page page-detail">' +
         LF.ui.headerHTML(tm.label + '详情', true) +
         '<div class="detail-hero">' +
-          '<img src="' + LF.escapeHtml(img) + '" alt="' + LF.escapeHtml(item.name) + '">' +
+          '<div class="detail-gallery" id="detailGallery">' +
+            galleryImages.map(function (image, index) {
+              return '<button class="detail-gallery__item" type="button" data-photo-index="' + index + '" aria-label="放大查看第 ' + (index + 1) + ' 张图片">' +
+                '<img src="' + LF.escapeHtml(image) + '" alt="' + LF.escapeHtml(item.name) + ' 图片 ' + (index + 1) + '">' +
+              '</button>';
+            }).join('') +
+          '</div>' +
           '<div class="detail-hero__badges">' +
             LF.ui.badgeHTML(tm.badge, tm.label) +
-            LF.ui.badgeHTML(sm.badge, sm.label) +
+            LF.ui.stateBadgesHTML(item) +
           '</div>' +
+          (galleryImages.length > 1 ? '<div class="detail-gallery__count" id="detailGalleryCount">1 / ' + galleryImages.length + '</div>' : '') +
         '</div>' +
         '<div class="detail-body">' +
           '<div class="detail-title-row"><h1 class="detail-title">' + LF.escapeHtml(item.name) + '</h1></div>' +
@@ -78,6 +85,19 @@ window.LF = window.LF || {};
       });
     });
 
+    const gallery = LF.$('#detailGallery');
+    gallery.querySelectorAll('[data-photo-index]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        LF.openLightbox(galleryImages, Number(button.getAttribute('data-photo-index')));
+      });
+    });
+    gallery.addEventListener('scroll', function () {
+      const count = LF.$('#detailGalleryCount');
+      if (!count) return;
+      const index = Math.round(gallery.scrollLeft / Math.max(gallery.clientWidth, 1));
+      count.textContent = (Math.min(index, galleryImages.length - 1) + 1) + ' / ' + galleryImages.length;
+    });
+
     const callBtn = container.querySelector('[data-call]');
     if (callBtn) {
       callBtn.addEventListener('click', function () {
@@ -89,15 +109,16 @@ window.LF = window.LF || {};
   }
 
   function mineActions(item) {
+    const resolvedLabel = LF.resolutionLabel(item);
     return '' +
       '<div class="detail-actions__row">' +
         '<button class="btn btn--outline" data-mine="edit">' + LF.icon('edit') + '编辑</button>' +
-        (item.status !== 'resolved'
-          ? '<button class="btn btn--ghost" data-mine="resolve">' + LF.icon('check') + '标记已找到</button>'
-          : '<button class="btn btn--ghost" data-mine="reopen">' + LF.icon('check') + '撤销已找到</button>') +
+        (item.found !== true
+          ? '<button class="btn btn--ghost" data-mine="find">' + LF.icon('check') + '标记' + resolvedLabel + '</button>'
+          : '<button class="btn btn--ghost" data-mine="unfind">' + LF.icon('check') + '撤销' + resolvedLabel + '</button>') +
       '</div>' +
       '<div class="detail-actions__row">' +
-        (item.status !== 'closed'
+        (item.closed !== true
           ? '<button class="btn btn--danger" data-mine="close">' + LF.icon('close') + '关闭信息</button>'
           : '<button class="btn btn--outline" data-mine="reopen">' + LF.icon('check') + '重新打开</button>') +
         '<button class="btn btn--danger" data-mine="delete">' + LF.icon('trash') + '删除</button>' +
@@ -111,18 +132,20 @@ window.LF = window.LF || {};
         const act = btn.getAttribute('data-mine');
         if (act === 'edit') {
           location.hash = '#/publish/edit/' + item.id;
-        } else if (act === 'resolve') {
-          applyStatus(item.id, 'resolved', '已标记为「已找到」');
+        } else if (act === 'find') {
+          applyPatch(item.id, { found: true }, '已标记为「' + LF.resolutionLabel(item) + '」');
+        } else if (act === 'unfind') {
+          applyPatch(item.id, { found: false }, '已撤销「' + LF.resolutionLabel(item) + '」');
         } else if (act === 'reopen') {
-          applyStatus(item.id, 'open', '已重新打开');
+          applyPatch(item.id, { closed: false }, '已重新打开');
         } else if (act === 'close') {
           LF.ui.modal({
             title: '关闭信息',
-            text: '关闭后该信息将不再显示在首页列表，可随时重新打开。',
+            text: '关闭后该信息不再公开显示，但不影响是否找到或归还，可随时重新打开。',
             okText: '确认关闭',
             danger: true
           }).then(function (ok) {
-            if (ok) applyStatus(item.id, 'closed', '已关闭');
+            if (ok) applyPatch(item.id, { closed: true }, '已关闭');
           });
         } else if (act === 'delete') {
           LF.ui.modal({
@@ -138,9 +161,9 @@ window.LF = window.LF || {};
     });
   }
 
-  async function applyStatus(id, status, msg) {
+  async function applyPatch(id, patch, msg) {
     try {
-      await LF.store.updateItem(id, { status: status });
+      await LF.store.updateItem(id, patch);
       LF.ui.toast(msg, 'success');
       setTimeout(function () { render(id); }, 250);
     } catch (e) {

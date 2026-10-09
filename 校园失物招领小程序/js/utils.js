@@ -130,6 +130,19 @@ window.LF = window.LF || {};
   }
   LF.placeholderFor = placeholderFor;
 
+  function itemImages(item) {
+    const images = item && Array.isArray(item.images) ? item.images : [];
+    return images.filter(function (image) {
+      return typeof image === 'string' && image;
+    }).slice(0, 6);
+  }
+  LF.itemImages = itemImages;
+
+  function resolutionLabel(item) {
+    return item && item.type === 'found' ? '已归还' : '已找到';
+  }
+  LF.resolutionLabel = resolutionLabel;
+
   /* ---------- 剪贴板 ---------- */
   function copyText(text) {
     if (navigator.clipboard && window.isSecureContext) {

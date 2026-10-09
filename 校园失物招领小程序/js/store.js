@@ -1,81 +1,99 @@
 /* ==========================================================================
    校园失物招领 · 数据层 (store.js)
-   说明：与后端 REST API 通信。
-         - 启动时 init() 拉取全部数据并缓存到内存，读操作（getItems/getItem）
-           直接读缓存、保持同步，便于视图层同步渲染。
-         - 写操作（addItem/updateItem/deleteItem）为异步，调用后端接口成功后
-           同步更新缓存。
-         - deviceId 仅用于本机标识“我的发布”，存于 localStorage。
+   说明：调用同源 REST API，并维护页面渲染所需的内存缓存。
+         发布者令牌只保存在当前浏览器，用于保护编辑和删除权限。
    ========================================================================== */
 window.LF = window.LF || {};
 
 (function () {
   const LF = window.LF;
   const API = '/api/items';
-  const DEVICE_KEY = 'lf_device_id_v1';
+  const OWNER_KEY = 'lf_owner_token_v2';
 
-  /* 内存缓存 */
   let cache = [];
+  let mineCache = [];
   let online = true;
 
-  /* ---------- 设备标识 ---------- */
-  function getDeviceId() {
-    let id = null;
-    try { id = localStorage.getItem(DEVICE_KEY); } catch (e) { /* 忽略 */ }
-    if (!id) {
-      id = 'dev-' + LF.uid();
-      try { localStorage.setItem(DEVICE_KEY, id); } catch (e) { /* 忽略 */ }
+  function randomToken() {
+    const bytes = new Uint8Array(32);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
     }
-    return id;
+    return Array.prototype.map.call(bytes, function (n) {
+      return n.toString(16).padStart(2, '0');
+    }).join('');
   }
 
-  /* ---------- 请求封装 ---------- */
+  function getOwnerToken() {
+    let token = null;
+    try { token = localStorage.getItem(OWNER_KEY); } catch (e) { /* 隐私模式下退化为临时令牌 */ }
+    if (!token || !/^[A-Za-z0-9_-]{32,128}$/.test(token)) {
+      token = randomToken();
+      try { localStorage.setItem(OWNER_KEY, token); } catch (e) { /* 忽略 */ }
+    }
+    return token;
+  }
+
+  function requestOptions(options) {
+    const result = Object.assign({}, options || {});
+    result.headers = Object.assign({
+      'Accept': 'application/json',
+      'X-Owner-Token': getOwnerToken()
+    }, result.headers || {});
+    return result;
+  }
+
   async function request(url, options) {
-    const res = await fetch(url, options);
+    const res = await fetch(url, requestOptions(options));
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* 保留状态码错误 */ }
     if (!res.ok) {
-      let msg = '请求失败 (' + res.status + ')';
-      try {
-        const data = await res.json();
-        if (data && data.error) msg = data.error;
-      } catch (e) { /* 忽略 */ }
-      throw new Error(msg);
+      throw new Error((data && data.error) || '请求失败 (' + res.status + ')');
     }
-    return res.json();
+    return data;
   }
 
-  /* ---------- 初始化：拉取全部数据 ---------- */
   async function init() {
     try {
-      cache = await request(API);
+      const results = await Promise.all([
+        request(API),
+        request(API + '?mine=1')
+      ]);
+      cache = Array.isArray(results[0]) ? results[0] : [];
+      mineCache = Array.isArray(results[1]) ? results[1] : [];
       online = true;
     } catch (e) {
       cache = [];
+      mineCache = [];
       online = false;
       throw e;
     }
     return cache;
   }
 
-  /* ---------- 读（同步，基于缓存） ---------- */
   function getItems() {
     return cache.slice();
   }
 
-  function getItem(id) {
-    for (let i = 0; i < cache.length; i++) {
-      if (cache[i].id === id) return cache[i];
-    }
-    return null;
+  function getMyItems() {
+    return mineCache.slice();
   }
 
-  /* ---------- 写（异步，成功后更新缓存） ---------- */
+  function getItem(id) {
+    return cache.find(function (item) { return item.id === id; }) ||
+      mineCache.find(function (item) { return item.id === id; }) || null;
+  }
+
   async function addItem(item) {
     const created = await request(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(item)
     });
-    cache.unshift(created);
+    if (created.closed !== true) cache.unshift(created);
+    if (created.isMine === true) mineCache.unshift(created);
     return created;
   }
 
@@ -85,30 +103,32 @@ window.LF = window.LF || {};
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
     });
-    for (let i = 0; i < cache.length; i++) {
-      if (cache[i].id === id) {
-        cache[i] = updated;
-        break;
-      }
-    }
+    cache = cache.filter(function (item) { return item.id !== id; });
+    if (updated.closed !== true) cache.unshift(updated);
+
+    const mineIndex = mineCache.findIndex(function (item) { return item.id === id; });
+    if (mineIndex !== -1) mineCache[mineIndex] = updated;
+    else if (updated.isMine === true) mineCache.unshift(updated);
     return updated;
   }
 
   async function deleteItem(id) {
     await request(API + '/' + encodeURIComponent(id), { method: 'DELETE' });
-    cache = cache.filter(function (it) { return it.id !== id; });
+    cache = cache.filter(function (item) { return item.id !== id; });
+    mineCache = mineCache.filter(function (item) { return item.id !== id; });
   }
 
   LF.store = {
     init: init,
     getItems: getItems,
+    getMyItems: getMyItems,
     getItem: getItem,
     addItem: addItem,
     updateItem: updateItem,
     deleteItem: deleteItem,
-    getDeviceId: getDeviceId,
+    getOwnerToken: getOwnerToken,
     isOnline: function () { return online; },
     API: API,
-    DEVICE_KEY: DEVICE_KEY
+    OWNER_KEY: OWNER_KEY
   };
 })();

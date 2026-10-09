@@ -8,37 +8,95 @@ window.LF = window.LF || {};
 (function () {
   const LF = window.LF;
   const esc = LF.escapeHtml;
+  let activeLightboxClose = null;
 
   /* ---------- 类型 / 状态 元信息 ---------- */
   const TYPE_META = {
     lost:  { label: '寻物', badge: 'lost' },
     found: { label: '招领', badge: 'found' }
   };
-  const STATUS_META = {
-    open:     { label: '进行中', badge: 'open' },
-    resolved: { label: '已找到', badge: 'resolved' },
-    closed:   { label: '已关闭', badge: 'closed' }
-  };
 
   function typeMeta(t) { return TYPE_META[t] || TYPE_META.lost; }
-  function statusMeta(s) { return STATUS_META[s] || STATUS_META.open; }
   LF.typeMeta = typeMeta;
-  LF.statusMeta = statusMeta;
 
   /* ---------- 徽章 ---------- */
   function badgeHTML(cls, text) {
     return '<span class="badge badge--' + cls + '">' + esc(text) + '</span>';
   }
 
+  function stateBadgesHTML(item) {
+    return (item.found === true ? badgeHTML('resolved', LF.resolutionLabel(item)) : '') +
+      (item.closed === true ? badgeHTML('closed', '已关闭') : '');
+  }
+
+  function openLightbox(images, startIndex) {
+    const safeImages = Array.isArray(images) ? images.filter(function (image) {
+      return typeof image === 'string' && image;
+    }) : [];
+    if (!safeImages.length) return;
+
+    if (activeLightboxClose) activeLightboxClose();
+
+    let index = Math.max(0, Math.min(Number(startIndex) || 0, safeImages.length - 1));
+    const overlay = document.createElement('div');
+    overlay.className = 'lightbox';
+    overlay.innerHTML = '' +
+      '<button class="lightbox__close icon-btn" type="button" aria-label="关闭大图">' + LF.icon('close') + '</button>' +
+      '<img class="lightbox__image" alt="放大的物品图片">' +
+      (safeImages.length > 1 ? '<div class="lightbox__count"></div>' : '');
+
+    function update() {
+      overlay.querySelector('.lightbox__image').src = safeImages[index];
+      const count = overlay.querySelector('.lightbox__count');
+      if (count) count.textContent = (index + 1) + ' / ' + safeImages.length;
+    }
+
+    function close() {
+      document.removeEventListener('keydown', onKeydown);
+      document.body.style.overflow = '';
+      overlay.remove();
+      if (activeLightboxClose === close) activeLightboxClose = null;
+    }
+
+    function onKeydown(e) {
+      if (e.key === 'Escape') close();
+      if (e.key === 'ArrowLeft') {
+        index = (index - 1 + safeImages.length) % safeImages.length;
+        update();
+      }
+      if (e.key === 'ArrowRight') {
+        index = (index + 1) % safeImages.length;
+        update();
+      }
+    }
+
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) close();
+    });
+    overlay.querySelector('.lightbox__close').addEventListener('click', close);
+    overlay.querySelector('.lightbox__image').addEventListener('click', function () {
+      if (safeImages.length < 2) return;
+      index = (index + 1) % safeImages.length;
+      update();
+    });
+    document.addEventListener('keydown', onKeydown);
+    document.body.style.overflow = 'hidden';
+    document.body.appendChild(overlay);
+    activeLightboxClose = close;
+    update();
+  }
+  LF.openLightbox = openLightbox;
+
   /* ---------- 信息卡片 ---------- */
   function cardHTML(item) {
     const tm = typeMeta(item.type);
-    const sm = statusMeta(item.status);
     const cat = LF.getCategory(item.category);
-    const img = item.image || LF.placeholderFor(item.category);
+    const img = LF.itemImages(item)[0] || LF.placeholderFor(item.category);
     return '' +
       '<div class="item-card" data-id="' + esc(item.id) + '">' +
-        (item.status !== 'open' ? '<span class="badge badge--' + sm.badge + ' item-card__status">' + esc(sm.label) + '</span>' : '') +
+        (item.found === true || item.closed === true
+          ? '<div class="item-card__status">' + stateBadgesHTML(item) + '</div>'
+          : '') +
         '<div class="item-card__thumb"><img src="' + esc(img) + '" alt="' + esc(item.name) + '" loading="lazy"></div>' +
         '<div class="item-card__body">' +
           '<div class="item-card__top">' +
@@ -147,6 +205,7 @@ window.LF = window.LF || {};
 
   LF.ui = {
     badgeHTML: badgeHTML,
+    stateBadgesHTML: stateBadgesHTML,
     cardHTML: cardHTML,
     listHTML: listHTML,
     emptyHTML: emptyHTML,

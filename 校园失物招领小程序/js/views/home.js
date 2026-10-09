@@ -41,6 +41,7 @@ window.LF = window.LF || {};
 
     function apply() {
       const items = LF.store.getItems()
+        .filter(function (it) { return it.closed !== true; })
         .filter(function (it) { return filter.type === 'all' || it.type === filter.type; })
         .sort(function (a, b) { return new Date(b.time) - new Date(a.time); });
       listEl.innerHTML = LF.ui.listHTML(items);
