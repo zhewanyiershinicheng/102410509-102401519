@@ -1,7 +1,7 @@
 /* ==========================================================================
    校园失物招领 · 应用入口 (app.js)
    说明：基于 location.hash 的轻量路由，负责页面调度、底部导航、
-         返回按钮与首次初始化（写入示例数据）。
+         返回按钮与首次初始化（从后端拉取数据）。
    ========================================================================== */
 (function () {
   const LF = window.LF;
@@ -53,8 +53,13 @@
       '<button class="tabbar__item" data-tab="my">' + LF.icon('user') + '<span>我的</span></button>';
   }
 
-  function init() {
-    LF.seed.seedIfEmpty();
+  async function init() {
+    try {
+      await LF.store.init();
+    } catch (e) {
+      LF.ui.toast('无法连接服务器，请确认后端已启动', 'error');
+    }
+
     buildTabbar();
 
     window.addEventListener('hashchange', render);

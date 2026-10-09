@@ -1,99 +1,114 @@
 /* ==========================================================================
    校园失物招领 · 数据层 (store.js)
-   说明：使用浏览器 localStorage 持久化数据，无后端。
-         - 数据统一存放在键 lf_items_v1 下（JSON 数组）。
-         - 每台设备一个 deviceId，用于区分“我的发布”。
+   说明：与后端 REST API 通信。
+         - 启动时 init() 拉取全部数据并缓存到内存，读操作（getItems/getItem）
+           直接读缓存、保持同步，便于视图层同步渲染。
+         - 写操作（addItem/updateItem/deleteItem）为异步，调用后端接口成功后
+           同步更新缓存。
+         - deviceId 仅用于本机标识“我的发布”，存于 localStorage。
    ========================================================================== */
 window.LF = window.LF || {};
 
 (function () {
   const LF = window.LF;
-  const KEY = 'lf_items_v1';
+  const API = '/api/items';
   const DEVICE_KEY = 'lf_device_id_v1';
 
-  /* 读写 localStorage，带 try/catch 容错（隐私模式 / file:// 受限等） */
-  function safeGet(key, fallback) {
-    try {
-      const v = localStorage.getItem(key);
-      return v == null ? fallback : v;
-    } catch (e) {
-      return fallback;
-    }
-  }
-  function safeSet(key, val) {
-    try {
-      localStorage.setItem(key, val);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
+  /* 内存缓存 */
+  let cache = [];
+  let online = true;
 
-  /* ---------- 物品列表读写 ---------- */
-  function getItems() {
-    try {
-      const arr = JSON.parse(safeGet(KEY, '[]'));
-      return Array.isArray(arr) ? arr : [];
-    } catch (e) {
-      return [];
-    }
-  }
-  function saveItems(items) {
-    return safeSet(KEY, JSON.stringify(items));
-  }
-
-  /* ---------- 设备标识（用于“我的发布”） ---------- */
+  /* ---------- 设备标识 ---------- */
   function getDeviceId() {
-    let id = safeGet(DEVICE_KEY, '');
+    let id = null;
+    try { id = localStorage.getItem(DEVICE_KEY); } catch (e) { /* 忽略 */ }
     if (!id) {
       id = 'dev-' + LF.uid();
-      safeSet(DEVICE_KEY, id);
+      try { localStorage.setItem(DEVICE_KEY, id); } catch (e) { /* 忽略 */ }
     }
     return id;
   }
 
-  /* ---------- 增删改查 ---------- */
-  function addItem(item) {
-    const items = getItems();
-    items.unshift(item);
-    saveItems(items);
-    return item;
-  }
-
-  function updateItem(id, patch) {
-    const items = getItems();
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].id === id) {
-        items[i] = Object.assign({}, items[i], patch, { id: id });
-        saveItems(items);
-        return items[i];
-      }
+  /* ---------- 请求封装 ---------- */
+  async function request(url, options) {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      let msg = '请求失败 (' + res.status + ')';
+      try {
+        const data = await res.json();
+        if (data && data.error) msg = data.error;
+      } catch (e) { /* 忽略 */ }
+      throw new Error(msg);
     }
-    return null;
+    return res.json();
   }
 
-  function deleteItem(id) {
-    const items = getItems().filter(function (it) { return it.id !== id; });
-    saveItems(items);
+  /* ---------- 初始化：拉取全部数据 ---------- */
+  async function init() {
+    try {
+      cache = await request(API);
+      online = true;
+    } catch (e) {
+      cache = [];
+      online = false;
+      throw e;
+    }
+    return cache;
+  }
+
+  /* ---------- 读（同步，基于缓存） ---------- */
+  function getItems() {
+    return cache.slice();
   }
 
   function getItem(id) {
-    const items = getItems();
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].id === id) return items[i];
+    for (let i = 0; i < cache.length; i++) {
+      if (cache[i].id === id) return cache[i];
     }
     return null;
   }
 
+  /* ---------- 写（异步，成功后更新缓存） ---------- */
+  async function addItem(item) {
+    const created = await request(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item)
+    });
+    cache.unshift(created);
+    return created;
+  }
+
+  async function updateItem(id, patch) {
+    const updated = await request(API + '/' + encodeURIComponent(id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch)
+    });
+    for (let i = 0; i < cache.length; i++) {
+      if (cache[i].id === id) {
+        cache[i] = updated;
+        break;
+      }
+    }
+    return updated;
+  }
+
+  async function deleteItem(id) {
+    await request(API + '/' + encodeURIComponent(id), { method: 'DELETE' });
+    cache = cache.filter(function (it) { return it.id !== id; });
+  }
+
   LF.store = {
+    init: init,
     getItems: getItems,
-    saveItems: saveItems,
-    getDeviceId: getDeviceId,
+    getItem: getItem,
     addItem: addItem,
     updateItem: updateItem,
     deleteItem: deleteItem,
-    getItem: getItem,
-    KEY: KEY,
+    getDeviceId: getDeviceId,
+    isOnline: function () { return online; },
+    API: API,
     DEVICE_KEY: DEVICE_KEY
   };
 })();

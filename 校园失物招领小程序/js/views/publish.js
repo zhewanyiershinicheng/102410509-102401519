@@ -138,7 +138,7 @@ window.LF = window.LF || {};
     // 提交
     LF.$('#f-submit').addEventListener('click', submit);
 
-    function submit() {
+    async function submit() {
       const name = LF.$('#f-name').value.trim();
       const time = LF.$('#f-time').value;
       const locationText = LF.$('#f-location').value.trim();
@@ -153,32 +153,42 @@ window.LF = window.LF || {};
       if (!contact) return LF.ui.toast('请填写联系方式', 'error');
 
       const timeISO = new Date(time).toISOString();
+      const btn = LF.$('#f-submit');
+      btn.disabled = true;
+      btn.textContent = isEdit ? '保存中…' : '发布中…';
 
-      if (isEdit) {
-        LF.store.updateItem(editId, {
-          type: state.type, name: name, category: state.category, time: timeISO,
-          location: locationText, description: description, image: state.image,
-          contact: contact, nickname: nickname
-        });
-        LF.ui.toast('修改成功', 'success');
-        setTimeout(function () { location.hash = '#/detail/' + editId; }, 450);
-      } else {
-        const newItem = LF.store.addItem({
-          id: LF.uid(), type: state.type, name: name, category: state.category, time: timeISO,
-          location: locationText, description: description, image: state.image,
-          contact: contact, nickname: nickname,
-          status: 'open', deviceId: LF.store.getDeviceId(), createdAt: Date.now()
-        });
-        LF.ui.modal({
-          icon: '🎉',
-          title: '发布成功',
-          text: '你的信息已发布，其他同学可以在首页看到它。',
-          okText: '查看详情',
-          cancelText: '返回首页'
-        }).then(function (ok) {
-          if (ok) location.hash = '#/detail/' + newItem.id;
-          else location.hash = '#/';
-        });
+      try {
+        if (isEdit) {
+          await LF.store.updateItem(editId, {
+            type: state.type, name: name, category: state.category, time: timeISO,
+            location: locationText, description: description, image: state.image,
+            contact: contact, nickname: nickname
+          });
+          LF.ui.toast('修改成功', 'success');
+          setTimeout(function () { location.hash = '#/detail/' + editId; }, 450);
+        } else {
+          const newItem = await LF.store.addItem({
+            id: LF.uid(), type: state.type, name: name, category: state.category, time: timeISO,
+            location: locationText, description: description, image: state.image,
+            contact: contact, nickname: nickname,
+            status: 'open', deviceId: LF.store.getDeviceId(), createdAt: Date.now()
+          });
+          LF.ui.modal({
+            icon: '🎉',
+            title: '发布成功',
+            text: '你的信息已发布，其他同学可以在首页看到它。',
+            okText: '查看详情',
+            cancelText: '返回首页'
+          }).then(function (ok) {
+            if (ok) location.hash = '#/detail/' + newItem.id;
+            else location.hash = '#/';
+          });
+        }
+      } catch (e) {
+        LF.ui.toast(e.message || '操作失败，请重试', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = isEdit ? '保存修改' : '发布';
       }
     }
   }

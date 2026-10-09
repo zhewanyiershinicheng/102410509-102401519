@@ -112,13 +112,9 @@ window.LF = window.LF || {};
         if (act === 'edit') {
           location.hash = '#/publish/edit/' + item.id;
         } else if (act === 'resolve') {
-          LF.store.updateItem(item.id, { status: 'resolved' });
-          LF.ui.toast('已标记为「已找到」', 'success');
-          setTimeout(function () { render(item.id); }, 250);
+          applyStatus(item.id, 'resolved', '已标记为「已找到」');
         } else if (act === 'reopen') {
-          LF.store.updateItem(item.id, { status: 'open' });
-          LF.ui.toast('已重新打开', 'success');
-          setTimeout(function () { render(item.id); }, 250);
+          applyStatus(item.id, 'open', '已重新打开');
         } else if (act === 'close') {
           LF.ui.modal({
             title: '关闭信息',
@@ -126,11 +122,7 @@ window.LF = window.LF || {};
             okText: '确认关闭',
             danger: true
           }).then(function (ok) {
-            if (ok) {
-              LF.store.updateItem(item.id, { status: 'closed' });
-              LF.ui.toast('已关闭', 'success');
-              setTimeout(function () { render(item.id); }, 250);
-            }
+            if (ok) applyStatus(item.id, 'closed', '已关闭');
           });
         } else if (act === 'delete') {
           LF.ui.modal({
@@ -139,15 +131,31 @@ window.LF = window.LF || {};
             okText: '确认删除',
             danger: true
           }).then(function (ok) {
-            if (ok) {
-              LF.store.deleteItem(item.id);
-              LF.ui.toast('已删除', 'success');
-              setTimeout(function () { location.hash = '#/my'; }, 250);
-            }
+            if (ok) applyDelete(item.id);
           });
         }
       });
     });
+  }
+
+  async function applyStatus(id, status, msg) {
+    try {
+      await LF.store.updateItem(id, { status: status });
+      LF.ui.toast(msg, 'success');
+      setTimeout(function () { render(id); }, 250);
+    } catch (e) {
+      LF.ui.toast(e.message || '操作失败，请重试', 'error');
+    }
+  }
+
+  async function applyDelete(id) {
+    try {
+      await LF.store.deleteItem(id);
+      LF.ui.toast('已删除', 'success');
+      setTimeout(function () { location.hash = '#/my'; }, 250);
+    } catch (e) {
+      LF.ui.toast(e.message || '操作失败，请重试', 'error');
+    }
   }
 
   LF.views = LF.views || {};
